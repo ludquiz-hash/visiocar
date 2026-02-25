@@ -13,6 +13,7 @@ import Team from './pages/Team.jsx';
 import Billing from './pages/Billing.jsx';
 import GarageSettings from './pages/GarageSettings.jsx';
 import Login from './pages/Login.jsx';
+import Register from './pages/Register.jsx';
 import AuthCallback from './pages/AuthCallback.jsx';
 import Pricing from './pages/Pricing.jsx';
 import Landing from './pages/Landing.jsx';
@@ -83,6 +84,11 @@ function AppRoutes() {
       <Route path="/login" element={
         <PublicRoute>
           <Login />
+        </PublicRoute>
+      } />
+      <Route path="/register" element={
+        <PublicRoute>
+          <Register />
         </PublicRoute>
       } />
       <Route path="/auth/callback" element={<AuthCallback />} />

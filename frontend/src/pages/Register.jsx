@@ -1,34 +1,46 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { Loader2, Mail, Lock, Eye, EyeOff, Chrome } from 'lucide-react';
+import { Loader2, Mail, Lock, Eye, EyeOff, Chrome, User } from 'lucide-react';
 
-export default function Login() {
+export default function Register() {
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { signInWithEmail, signInWithGoogle } = useAuth();
+  const { signUpWithEmail, signInWithGoogle } = useAuth();
   const navigate = useNavigate();
 
-  const handleEmailLogin = async (e) => {
+  const handleRegister = async (e) => {
     e.preventDefault();
     setError('');
     
-    if (!email || !password) {
-      setError('Veuillez entrer votre email et mot de passe');
+    if (!email || !password || !fullName) {
+      setError('Veuillez remplir tous les champs');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Les mots de passe ne correspondent pas');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Le mot de passe doit contenir au moins 6 caractères');
       return;
     }
 
     setIsLoading(true);
-    const result = await signInWithEmail(email, password);
+    const result = await signUpWithEmail(email, password, fullName);
     setIsLoading(false);
 
     if (result.success) {
       navigate('/dashboard');
     } else {
-      setError(result.error || 'Email ou mot de passe incorrect');
+      setError(result.error || 'Erreur lors de la création du compte');
     }
   };
 
@@ -41,7 +53,6 @@ export default function Login() {
     if (!result.success) {
       setError(result.error || 'Erreur de connexion avec Google');
     }
-    // Si succès, le callback OAuth gère la redirection
   };
 
   return (
@@ -56,9 +67,9 @@ export default function Login() {
         {/* Card */}
         <div className="bg-[#151921] rounded-2xl p-8 border border-white/[0.06]">
           <div className="text-center mb-6">
-            <h2 className="text-xl font-semibold text-white mb-2">Connexion</h2>
+            <h2 className="text-xl font-semibold text-white mb-2">Créer un compte</h2>
             <p className="text-sm text-white/50">
-              Connectez-vous pour accéder à votre tableau de bord
+              Commencez à utiliser VisioCar gratuitement
             </p>
           </div>
 
@@ -87,8 +98,25 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Email/Password Form */}
-          <form onSubmit={handleEmailLogin} className="space-y-4">
+          {/* Registration Form */}
+          <form onSubmit={handleRegister} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-white/70 mb-2">
+                Nom complet
+              </label>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Jean Dupont"
+                  className="w-full pl-12 pr-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#007AFF]/50 focus:bg-white/[0.06] transition-all"
+                  required
+                />
+              </div>
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-white/70 mb-2">
                 Adresse email
@@ -119,6 +147,7 @@ export default function Login() {
                   placeholder="••••••••"
                   className="w-full pl-12 pr-12 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#007AFF]/50 focus:bg-white/[0.06] transition-all"
                   required
+                  minLength={6}
                 />
                 <button
                   type="button"
@@ -130,6 +159,23 @@ export default function Login() {
               </div>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-white/70 mb-2">
+                Confirmer le mot de passe
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full pl-12 pr-4 py-3 bg-white/[0.04] border border-white/[0.08] rounded-xl text-white placeholder:text-white/30 focus:outline-none focus:border-[#007AFF]/50 focus:bg-white/[0.06] transition-all"
+                  required
+                />
+              </div>
+            </div>
+
             <button
               type="submit"
               disabled={isLoading}
@@ -138,28 +184,20 @@ export default function Login() {
               {isLoading ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                'Se connecter'
+                'Créer mon compte'
               )}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-sm text-white/50">
-              Pas encore de compte ?{' '}
-              <Link to="/register" className="text-[#007AFF] hover:underline">
-                Créer un compte
+              Déjà un compte ?{' '}
+              <Link to="/login" className="text-[#007AFF] hover:underline">
+                Se connecter
               </Link>
             </p>
           </div>
         </div>
-
-        {/* Footer */}
-        <p className="text-center text-sm text-white/30 mt-8">
-          En vous connectant, vous acceptez nos{' '}
-          <a href="#" className="text-[#007AFF] hover:underline">Conditions d'utilisation</a>
-          {' '}et{' '}
-          <a href="#" className="text-[#007AFF] hover:underline">Politique de confidentialité</a>
-        </p>
       </div>
     </div>
   );

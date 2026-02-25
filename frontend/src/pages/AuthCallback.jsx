@@ -1,23 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase.js';
 import { Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function AuthCallback() {
-  const [status, setStatus] = useState('processing'); // 'processing' | 'success' | 'error'
+  const [status, setStatus] = useState('processing');
   const [errorMessage, setErrorMessage] = useState('');
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    const handleAuthCallback = async () => {
-      console.log('[AuthCallback] Starting callback handling...');
-      console.log('[AuthCallback] Current URL:', window.location.href);
+    const handleCallback = async () => {
+      console.log('[AuthCallback] Starting...');
+      console.log('[AuthCallback] URL:', window.location.href);
       
       try {
-        // Check for error in URL
-        const error = searchParams.get('error');
-        const errorDescription = searchParams.get('error_description');
+        // Check for errors in URL
+        const params = new URLSearchParams(window.location.search);
+        const error = params.get('error');
+        const errorDescription = params.get('error_description');
         
         if (error) {
           console.error('[AuthCallback] Error in URL:', error, errorDescription);
@@ -26,39 +26,27 @@ export default function AuthCallback() {
           return;
         }
 
-        // Check for access_token in URL hash (magic link format: #access_token=...)
-        const hash = window.location.hash;
-        console.log('[AuthCallback] URL hash:', hash);
+        // Exchange the code for a session (OAuth flow)
+        const code = params.get('code');
         
-        if (hash && hash.includes('access_token=')) {
-          const hashParams = new URLSearchParams(hash.substring(1));
-          const accessToken = hashParams.get('access_token');
-          const refreshToken = hashParams.get('refresh_token');
+        if (code) {
+          console.log('[AuthCallback] Exchanging code for session...');
+          const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           
-          console.log('[AuthCallback] Found access_token in hash');
+          if (exchangeError) {
+            console.error('[AuthCallback] Exchange error:', exchangeError);
+            throw exchangeError;
+          }
           
-          if (accessToken) {
-            const { data, error: setSessionError } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken || '',
-            });
-            
-            if (setSessionError) {
-              console.error('[AuthCallback] setSession error:', setSessionError);
-              throw setSessionError;
-            }
-            
-            if (data?.session?.user) {
-              console.log('[AuthCallback] Session set successfully for:', data.session.user.email);
-              setStatus('success');
-              setTimeout(() => navigate('/dashboard'), 1500);
-              return;
-            }
+          if (data?.session) {
+            console.log('[AuthCallback] Session obtained:', data.session.user?.email);
+            setStatus('success');
+            setTimeout(() => navigate('/dashboard'), 1000);
+            return;
           }
         }
 
-        // Get the session (Supabase automatically handles the token in the URL)
-        console.log('[AuthCallback] Getting session from Supabase...');
+        // Check if we already have a session (from hash or previous OAuth)
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
@@ -67,41 +55,17 @@ export default function AuthCallback() {
         }
         
         if (session?.user) {
-          console.log('[AuthCallback] Session found, user:', session.user.email);
+          console.log('[AuthCallback] Existing session found:', session.user.email);
           setStatus('success');
-          
-          // Short delay to show success message
-          setTimeout(() => {
-            navigate('/dashboard');
-          }, 1500);
-        } else {
-          // Try to exchange the code for a session
-          console.log('[AuthCallback] No session, checking for code...');
-          const code = searchParams.get('code');
-          
-          if (code) {
-            console.log('[AuthCallback] Exchanging code for session...');
-            const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-            
-            if (exchangeError) {
-              console.error('[AuthCallback] Code exchange error:', exchangeError);
-              throw exchangeError;
-            }
-            
-            // Check session again
-            const { data: { session: newSession } } = await supabase.auth.getSession();
-            if (newSession?.user) {
-              console.log('[AuthCallback] Session obtained after exchange');
-              setStatus('success');
-              setTimeout(() => navigate('/dashboard'), 1500);
-              return;
-            }
-          }
-          
-          console.log('[AuthCallback] No session available');
-          setStatus('error');
-          setErrorMessage('Session non trouvée. Vérifiez que vous utilisez le bon lien et qu\'il n\'a pas expiré.');
+          setTimeout(() => navigate('/dashboard'), 1000);
+          return;
         }
+
+        // No session found
+        console.log('[AuthCallback] No session available');
+        setStatus('error');
+        setErrorMessage('Session non trouvée. Veuillez réessayer.');
+        
       } catch (err) {
         console.error('[AuthCallback] Exception:', err);
         setStatus('error');
@@ -109,8 +73,8 @@ export default function AuthCallback() {
       }
     };
 
-    handleAuthCallback();
-  }, [navigate, searchParams]);
+    handleCallback();
+  }, [navigate]);
 
   if (status === 'processing') {
     return (

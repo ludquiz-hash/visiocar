@@ -9,33 +9,61 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [authInitialized, setAuthInitialized] = useState(false);
 
-  // Fetch user profile
-  const fetchProfile = useCallback(async (userId) => {
-    if (!userId) return;
-    
+  // Get app URL from env
+  const getAppUrl = () => {
+    return import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin;
+  };
+
+  // Create or update user profile
+  const ensureProfile = async (userId, email, fullName = '') => {
     try {
-      console.log('[Auth] Fetching profile for user:', userId);
-      const { data, error } = await supabase
+      console.log('[Auth] Ensuring profile for:', userId);
+      
+      // Check if profile exists
+      const { data: existingProfile, error: fetchError } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (error) {
-        console.error('[Auth] Profile fetch error:', error);
-        // Don't block auth if profile fetch fails
-        setProfile(null);
-      } else {
-        console.log('[Auth] Profile fetched:', data);
-        setProfile(data);
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        console.error('[Auth] Profile fetch error:', fetchError);
       }
+
+      if (existingProfile) {
+        console.log('[Auth] Profile exists:', existingProfile);
+        setProfile(existingProfile);
+        return existingProfile;
+      }
+
+      // Create new profile
+      const { data: newProfile, error: insertError } = await supabase
+        .from('profiles')
+        .insert([
+          {
+            id: userId,
+            email: email,
+            full_name: fullName || email.split('@')[0],
+            created_at: new Date().toISOString(),
+          }
+        ])
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error('[Auth] Profile creation error:', insertError);
+        throw insertError;
+      }
+
+      console.log('[Auth] Profile created:', newProfile);
+      setProfile(newProfile);
+      return newProfile;
     } catch (error) {
-      console.error('[Auth] Profile fetch exception:', error);
-      setProfile(null);
+      console.error('[Auth] Ensure profile error:', error);
+      return null;
     }
-  }, []);
+  };
 
   // Initialize auth state
   useEffect(() => {
@@ -45,33 +73,27 @@ export function AuthProvider({ children }) {
       console.log('[Auth] Initializing...');
       
       try {
-        // Get current session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (sessionError) {
-          console.error('[Auth] Session error:', sessionError);
-        }
-
         if (!mounted) return;
+
+        if (error) {
+          console.error('[Auth] Session error:', error);
+        }
 
         if (session?.user) {
           console.log('[Auth] Session found:', session.user.email);
           setUser(session.user);
           setIsAuthenticated(true);
-          await fetchProfile(session.user.id);
+          await ensureProfile(session.user.id, session.user.email, session.user.user_metadata?.full_name);
         } else {
-          console.log('[Auth] No session found');
-          setUser(null);
-          setProfile(null);
-          setIsAuthenticated(false);
+          console.log('[Auth] No session');
         }
       } catch (error) {
-        console.error('[Auth] Initialization error:', error);
+        console.error('[Auth] Init error:', error);
       } finally {
         if (mounted) {
           setIsLoading(false);
-          setAuthInitialized(true);
-          console.log('[Auth] Initialization complete');
         }
       }
     };
@@ -80,7 +102,7 @@ export function AuthProvider({ children }) {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[Auth] Event:', event, 'Session:', session ? 'present' : 'null');
+      console.log('[Auth] Event:', event);
       
       if (!mounted) return;
 
@@ -88,21 +110,12 @@ export function AuthProvider({ children }) {
         if (session?.user) {
           setUser(session.user);
           setIsAuthenticated(true);
-          await fetchProfile(session.user.id);
+          await ensureProfile(session.user.id, session.user.email, session.user.user_metadata?.full_name);
         }
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setProfile(null);
         setIsAuthenticated(false);
-      } else if (event === 'USER_UPDATED') {
-        if (session?.user) {
-          setUser(session.user);
-        }
-      }
-      
-      if (event === 'INITIAL_SESSION') {
-        setIsLoading(false);
-        setAuthInitialized(true);
       }
     });
 
@@ -110,80 +123,135 @@ export function AuthProvider({ children }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchProfile]);
+  }, []);
 
-  const signInWithOtp = async (email) => {
+  // Sign up with email/password
+  const signUpWithEmail = async (email, password, fullName) => {
     try {
-      console.log('[Auth] ================================');
-      console.log('[Auth] Starting Magic Link request...');
-      console.log('[Auth] Email:', email);
+      console.log('[Auth] Signing up:', email);
       
-      // CRITICAL: Use env var for redirect URL, NEVER hardcode
-      const appUrl = import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin;
-      const redirectUrl = `${appUrl}/auth/callback`;
-      
-      console.log('[Auth] VITE_PUBLIC_APP_URL:', import.meta.env.VITE_PUBLIC_APP_URL);
-      console.log('[Auth] Computed redirectUrl:', redirectUrl);
-      console.log('[Auth] Full window.location:', window.location.href);
-      console.log('[Auth] ================================');
-      
-      const { data, error } = await supabase.auth.signInWithOtp({
+      const { data, error } = await supabase.auth.signUp({
         email,
+        password,
         options: {
-          emailRedirectTo: redirectUrl,
+          data: {
+            full_name: fullName,
+          },
         },
       });
-      
-      console.log('[Auth] signInWithOtp response:', { data, error: error?.message });
 
-      if (error) {
-        console.error('[Auth] SignIn error:', error);
-        throw error;
+      if (error) throw error;
+
+      if (data.user) {
+        // Create profile immediately
+        await ensureProfile(data.user.id, email, fullName);
+        toast.success('Compte créé avec succès !');
+        return { success: true };
       }
-      
-      toast.success('Email envoyé ! Vérifiez votre boîte de réception.');
-      return { success: true };
+
+      return { success: false, error: 'Erreur lors de la création du compte' };
     } catch (error) {
-      console.error('[Auth] SignIn exception:', error);
-      toast.error(error.message || 'Erreur lors de l\'envoi de l\'email');
+      console.error('[Auth] Sign up error:', error);
+      toast.error(error.message || 'Erreur lors de l\'inscription');
       return { success: false, error: error.message };
     }
   };
 
-  const verifyOtp = async (email, token) => {
+  // Sign in with email/password
+  const signInWithEmail = async (email, password) => {
     try {
-      console.log('[Auth] Verifying OTP for:', email);
-      const { data, error } = await supabase.auth.verifyOtp({
+      console.log('[Auth] Signing in:', email);
+      
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        token,
-        type: 'email',
+        password,
       });
 
-      if (error) {
-        console.error('[Auth] Verify error:', error);
-        throw error;
+      if (error) throw error;
+
+      if (data.user) {
+        toast.success('Connexion réussie !');
+        return { success: true };
       }
 
-      console.log('[Auth] OTP verified, user:', data?.user?.email);
-      toast.success('Connexion réussie !');
-      return { success: true, data };
+      return { success: false, error: 'Email ou mot de passe incorrect' };
     } catch (error) {
-      console.error('[Auth] Verify exception:', error);
-      toast.error(error.message || 'Code invalide');
+      console.error('[Auth] Sign in error:', error);
+      toast.error(error.message || 'Erreur de connexion');
       return { success: false, error: error.message };
     }
   };
 
+  // Sign in with Google
+  const signInWithGoogle = async () => {
+    try {
+      console.log('[Auth] Starting Google OAuth...');
+      
+      const redirectUrl = `${getAppUrl()}/auth/callback`;
+      console.log('[Auth] Google redirect URL:', redirectUrl);
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.url) {
+        // Redirect to Google
+        window.location.href = data.url;
+        return { success: true };
+      }
+
+      return { success: false, error: 'Erreur OAuth' };
+    } catch (error) {
+      console.error('[Auth] Google sign in error:', error);
+      toast.error(error.message || 'Erreur de connexion avec Google');
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Sign in with Apple (optional)
+  const signInWithApple = async () => {
+    try {
+      console.log('[Auth] Starting Apple OAuth...');
+      
+      const redirectUrl = `${getAppUrl()}/auth/callback`;
+      
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: {
+          redirectTo: redirectUrl,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.url) {
+        window.location.href = data.url;
+        return { success: true };
+      }
+
+      return { success: false, error: 'Erreur OAuth' };
+    } catch (error) {
+      console.error('[Auth] Apple sign in error:', error);
+      toast.error(error.message || 'Erreur de connexion avec Apple');
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Sign out
   const signOut = async () => {
     try {
-      console.log('[Auth] Signing out...');
       await supabase.auth.signOut();
       setUser(null);
       setProfile(null);
       setIsAuthenticated(false);
       toast.success('Déconnexion réussie');
     } catch (error) {
-      console.error('[Auth] SignOut error:', error);
+      console.error('[Auth] Sign out error:', error);
     }
   };
 
@@ -192,9 +260,10 @@ export function AuthProvider({ children }) {
     profile,
     isLoading,
     isAuthenticated,
-    authInitialized,
-    signInWithOtp,
-    verifyOtp,
+    signUpWithEmail,
+    signInWithEmail,
+    signInWithGoogle,
+    signInWithApple,
     signOut,
   };
 
