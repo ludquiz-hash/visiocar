@@ -1,0 +1,20 @@
+{
+  "name": "visiocar-api",
+  "env": {
+    "NODE_ENV": "production",
+    "FRONTEND_URL": "https://voluble-biscotti-0d950f.netlify.app",
+    "SUPABASE_URL": "https://dpgzrymeqwwjpoxoiwaf.supabase.co",
+    "SUPABASE_ANON_KEY": "sb_publishable_ATYFiiMT19IEPLdlxRMeug_3kqTsyQD",
+    "SUPABASE_SERVICE_ROLE_KEY": "sb_publishable_ATYFiiMT19IEPLdlxRMeug_3kqTsyQD",
+    "JWT_SECRET": {
+      "description": "Secret key for JWT signing (min 32 chars)",
+      "generateValue": true
+    }
+  },
+  "build": {
+    "command": "cd backend && npm install"
+  },
+  "start": {
+    "command": "cd backend && npm start"
+  }
+}
