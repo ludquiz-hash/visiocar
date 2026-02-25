@@ -114,22 +114,27 @@ export function AuthProvider({ children }) {
 
   const signInWithOtp = async (email) => {
     try {
-      console.log('[Auth] Sending OTP to:', email);
+      console.log('[Auth] ================================');
+      console.log('[Auth] Starting Magic Link request...');
+      console.log('[Auth] Email:', email);
       
-      // Determine correct redirect URL based on environment
-      const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      const redirectUrl = isDev 
-        ? 'http://localhost:5173/auth/callback'  // Vite default port
-        : `${window.location.origin}/auth/callback`;
+      // CRITICAL: Use env var for redirect URL, NEVER hardcode
+      const appUrl = import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin;
+      const redirectUrl = `${appUrl}/auth/callback`;
       
-      console.log('[Auth] Redirect URL:', redirectUrl);
+      console.log('[Auth] VITE_PUBLIC_APP_URL:', import.meta.env.VITE_PUBLIC_APP_URL);
+      console.log('[Auth] Computed redirectUrl:', redirectUrl);
+      console.log('[Auth] Full window.location:', window.location.href);
+      console.log('[Auth] ================================');
       
-      const { error } = await supabase.auth.signInWithOtp({
+      const { data, error } = await supabase.auth.signInWithOtp({
         email,
         options: {
           emailRedirectTo: redirectUrl,
         },
       });
+      
+      console.log('[Auth] signInWithOtp response:', { data, error: error?.message });
 
       if (error) {
         console.error('[Auth] SignIn error:', error);

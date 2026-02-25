@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>VisioCar Auth Diagnostic</title>
+  <style>
+    body { font-family: system-ui; padding: 20px; max-width: 800px; margin: 0 auto; }
+    .ok { color: green; }
+    .error { color: red; }
+    .warn { color: orange; }
+    pre { background: #f4f4f4; padding: 10px; overflow-x: auto; }
+    button { padding: 10px 20px; cursor: pointer; margin: 5px; }
+  </style>
+</head>
+<body>
+  <h1>🔧 VisioCar Auth Diagnostic</h1>
+  
+  <h2>Environment Check</h2>
+  <div id="env-check"></div>
+  
+  <h2>Supabase Config</h2>
+  <div id="supabase-check"></div>
+  
+  <h2>Test Magic Link</h2>
+  <input type="email" id="test-email" placeholder="your@email.com" />
+  <button onclick="testMagicLink()">Test Magic Link</button>
+  <div id="test-result"></div>
+  
+  <h2>Required Supabase Dashboard Settings</h2>
+  <pre id="required-settings"></pre>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+    
+    // Read env from vite (these will be injected at build time)
+    const supabaseUrl = localStorage.getItem('VITE_SUPABASE_URL') || 'NOT_SET';
+    const supabaseKey = localStorage.getItem('VITE_SUPABASE_ANON_KEY') || 'NOT_SET';
+    const appUrl = localStorage.getItem('VITE_PUBLIC_APP_URL') || 'NOT_SET';
+    
+    // Display current URL info
+    document.getElementById('env-check').innerHTML = `
+      <p><strong>Current Page URL:</strong> ${window.location.href}</p>
+      <p><strong>Origin:</strong> ${window.location.origin}</p>
+      <p><strong>Hostname:</strong> ${window.location.hostname}</p>
+      <p><strong>Port:</strong> ${window.location.port || 'default'}</p>
+      <hr>
+      <p><strong>VITE_PUBLIC_APP_URL (from env):</strong> ${appUrl}</p>
+      <p><strong>Expected Callback URL:</strong> ${appUrl}/auth/callback</p>
+    `;
+    
+    // Check Supabase connection
+    if (supabaseUrl !== 'NOT_SET' && supabaseKey !== 'NOT_SET') {
+      try {
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        document.getElementById('supabase-check').innerHTML = `
+          <p class="ok">✅ Supabase client created successfully</p>
+          <p>URL: ${supabaseUrl}</p>
+        `;
+        
+        window.testSupabase = supabase;
+      } catch (e) {
+        document.getElementById('supabase-check').innerHTML = `
+          <p class="error">❌ Failed to create Supabase client: ${e.message}</p>
+        `;
+      }
+    } else {
+      document.getElementById('supabase-check').innerHTML = `
+        <p class="warn">⚠️ Supabase credentials not found in localStorage</p>
+        <p>Please set them in the console:</p>
+        <pre>localStorage.setItem('VITE_SUPABASE_URL', 'your-url');
+localStorage.setItem('VITE_SUPABASE_ANON_KEY', 'your-key');
+localStorage.setItem('VITE_PUBLIC_APP_URL', 'http://localhost:5173');</pre>
+      `;
+    }
+    
+    // Required settings
+    document.getElementById('required-settings').textContent = `
+SUPABASE DASHBOARD → Authentication → URL Configuration
+
+Site URL: ${appUrl || 'http://localhost:5173'}
+
+Redirect URLs (add ALL of these):
+- ${appUrl || 'http://localhost:5173'}/**
+- http://localhost:5173/**
+- http://127.0.0.1:5173/**
+
+IMPORTANT: Click "Save" after making changes!
+`;
+    
+    // Test function
+    window.testMagicLink = async () => {
+      const email = document.getElementById('test-email').value;
+      if (!email) {
+        alert('Please enter an email');
+        return;
+      }
+      
+      const resultDiv = document.getElementById('test-result');
+      resultDiv.innerHTML = '<p>Sending magic link...</p>';
+      
+      try {
+        const appUrl = localStorage.getItem('VITE_PUBLIC_APP_URL') || window.location.origin;
+        const redirectUrl = `${appUrl}/auth/callback`;
+        
+        console.log('Sending magic link with redirectTo:', redirectUrl);
+        
+        const { data, error } = await window.testSupabase.auth.signInWithOtp({
+          email,
+          options: { emailRedirectTo: redirectUrl }
+        });
+        
+        if (error) throw error;
+        
+        resultDiv.innerHTML = `
+          <p class="ok">✅ Magic link sent successfully!</p>
+          <p><strong>Redirect URL used:</strong> ${redirectUrl}</p>
+          <p class="warn">⚠️ Check your email and verify the link points to: ${redirectUrl}</p>
+          <p>If the email link points to a different URL (e.g., localhost:3000), 
+             you need to update Supabase Dashboard → Auth → URL Configuration.</p>
+        `;
+      } catch (err) {
+        resultDiv.innerHTML = `<p class="error">❌ Error: ${err.message}</p>`;
+      }
+    };
+  </script>
+</body>
+</html>
