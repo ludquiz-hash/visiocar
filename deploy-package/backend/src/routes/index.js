@@ -2,15 +2,11 @@ import { Router } from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { validateClaim, validateGarage, validateAuth, validateStripe } from '../middleware/validation.js';
 import { ClaimsController, GarageController, AuthController } from '../controllers/index.js';
-import authRoutes from './auth.js';
 import Stripe from 'stripe';
 import { config } from '../config/index.js';
 import { GarageModel } from '../models/index.js';
 
 const router = Router();
-
-// Public auth routes (OTP)
-router.use('/auth', authRoutes);
 
 // Health check
 router.get('/health', (req, res) => {

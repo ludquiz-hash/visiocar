@@ -333,6 +333,27 @@ CREATE POLICY "Allow authenticated logo uploads"
     WITH CHECK (bucket_id = 'garage-logos');
 
 -- ============================================
+-- OTP CODES (for email authentication)
+-- ============================================
+CREATE TABLE otp_codes (
+    email TEXT PRIMARY KEY,
+    code TEXT NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE otp_codes ENABLE ROW LEVEL SECURITY;
+
+-- Allow service role to manage OTP codes
+CREATE POLICY "Service role can manage OTP"
+    ON otp_codes FOR ALL
+    TO service_role
+    USING (true)
+    WITH CHECK (true);
+
+-- ============================================
 -- FUNCTIONS
 -- ============================================
 

@@ -1,20 +1,4 @@
 import { supabaseAdmin } from '../config/supabase.js';
-import jwt from 'jsonwebtoken';
-import { config } from '../config/index.js';
-
-/**
- * Generate JWT token for user
- */
-export function generateToken(user) {
-  return jwt.sign(
-    { 
-      userId: user.id,
-      email: user.email,
-    },
-    config.jwt.secret,
-    { expiresIn: config.jwt.expiresIn }
-  );
-}
 
 /**
  * Authentication middleware

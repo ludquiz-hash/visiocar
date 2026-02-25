@@ -10,6 +10,7 @@ redirects = []
 publish = "/data/.openclaw/workspace/visiocar-standalone/frontend/dist"
 publishOrigin = "ui"
 commandOrigin = "ui"
+base = "/data/.openclaw/workspace/visiocar-standalone/frontend"
 command = "npm run build"
 
 [build.environment]

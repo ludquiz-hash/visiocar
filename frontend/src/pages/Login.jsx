@@ -1,26 +1,59 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext.jsx';
-import { Loader2, Mail, ArrowRight, CheckCircle } from 'lucide-react';
+import { Loader2, Mail, ArrowRight, CheckCircle, Timer } from 'lucide-react';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [step, setStep] = useState('email'); // 'email' | 'otp'
   const [isLoading, setIsLoading] = useState(false);
-  const { signInWithOtp, verifyOtp } = useAuth();
+  const [countdown, setCountdown] = useState(0);
+  const [error, setError] = useState(null);
+  const { signInWithOtp, verifyOtp, handleMagicLink } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Check for magic link token in URL
+  useEffect(() => {
+    const accessToken = searchParams.get('access_token');
+    if (accessToken) {
+      handleMagicLinkLogin(accessToken);
+    }
+  }, [searchParams]);
+
+  // Countdown timer for rate limit
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [countdown]);
+
+  const handleMagicLinkLogin = async (token) => {
+    setIsLoading(true);
+    const result = await handleMagicLink(token);
+    setIsLoading(false);
+    if (result.success) {
+      navigate('/dashboard');
+    }
+  };
 
   const handleSendOTP = async (e) => {
     e.preventDefault();
-    if (!email) return;
+    if (!email || countdown > 0) return;
 
     setIsLoading(true);
+    setError(null);
     const result = await signInWithOtp(email);
     setIsLoading(false);
 
     if (result.success) {
       setStep('otp');
+      setCountdown(60); // 60 secondes avant de pouvoir renvoyer
+    } else if (result.error?.message?.includes('rate limit') || result.error?.message?.includes('security')) {
+      setError('Trop de tentatives. Veuillez patienter 1 minute avant de réessayer.');
+      setCountdown(60);
     }
   };
 
@@ -58,6 +91,11 @@ export default function Login() {
               </div>
 
               <form onSubmit={handleSendOTP} className="space-y-4">
+                {error && (
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm">
+                    {error}
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-white/70 mb-2">
                     Adresse email
@@ -77,11 +115,16 @@ export default function Login() {
 
                 <button
                   type="submit"
-                  disabled={isLoading || !email}
+                  disabled={isLoading || !email || countdown > 0}
                   className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#007AFF] text-white rounded-xl font-medium hover:bg-[#007AFF]/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
                     <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : countdown > 0 ? (
+                    <>
+                      <Timer className="w-5 h-5" />
+                      Patientez {countdown}s
+                    </>
                   ) : (
                     <>
                       Continuer
@@ -100,6 +143,9 @@ export default function Login() {
                 <h2 className="text-xl font-semibold text-white mb-2">Vérifiez votre email</h2>
                 <p className="text-sm text-white/50">
                   Un code à 6 chiffres a été envoyé à <strong className="text-white">{email}</strong>
+                </p>
+                <p className="text-xs text-white/30 mt-2">
+                  💡 Si vous recevez un lien, cliquez dessus ou copiez le code à 6 chiffres de l'email
                 </p>
               </div>
 
@@ -134,9 +180,18 @@ export default function Login() {
                   )}
                 </button>
 
+                {countdown > 0 && (
+                  <p className="text-center text-sm text-white/30">
+                    Renvoyer le code dans {countdown}s
+                  </p>
+                )}
+                
                 <button
                   type="button"
-                  onClick={() => setStep('email')}
+                  onClick={() => {
+                    setStep('email');
+                    setOtpCode('');
+                  }}
                   className="w-full py-2 text-sm text-white/50 hover:text-white transition-colors"
                 >
                   Utiliser un autre email

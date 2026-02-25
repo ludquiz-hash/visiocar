@@ -20,7 +20,3 @@ services:
         value: sb_publishable_ATYFiiMT19IEPLdlxRMeug_3kqTsyQD
       - key: JWT_SECRET
         generateValue: true
-      - key: RESEND_API_KEY
-        value: re_Dz9AVQrw_B59qqFaWfquqZGhZm8QJZ5e7
-      - key: RESEND_DOMAIN
-        value: resend.dev

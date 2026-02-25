@@ -3,10 +3,17 @@ import { getCurrentSession } from './supabase.js';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 /**
+ * Get stored JWT token
+ */
+function getToken() {
+  return localStorage.getItem('visiocar_token');
+}
+
+/**
  * Generic API request helper
  */
 async function apiRequest(endpoint, options = {}) {
-  const session = await getCurrentSession();
+  const token = getToken();
   
   const headers = {
     'Content-Type': 'application/json',
@@ -14,8 +21,8 @@ async function apiRequest(endpoint, options = {}) {
   };
 
   // Add auth token if available
-  if (session?.access_token) {
-    headers.Authorization = `Bearer ${session.access_token}`;
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
   const response = await fetch(`${API_URL}${endpoint}`, {
@@ -51,22 +58,37 @@ export const authApi = {
   },
 
   async signInWithOtp(email) {
-    const { supabase } = await import('./supabase.js');
-    return supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: window.location.origin,
-      },
-    });
+    try {
+      const response = await fetch(`${API_URL}/auth/otp/send`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return { success: false, error: data.error || 'Failed to send code' };
+      }
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   },
 
-  async verifyOtp(email, token) {
-    const { supabase } = await import('./supabase.js');
-    return supabase.auth.verifyOtp({
-      email,
-      token,
-      type: 'email',
-    });
+  async verifyOtp(email, token, fullName = '') {
+    try {
+      const response = await fetch(`${API_URL}/auth/otp/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code: token, fullName }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        return { success: false, error: data.error || 'Invalid code' };
+      }
+      return { success: true, data: data.data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
   },
 
   async signOut() {

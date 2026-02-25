@@ -66,8 +66,10 @@ export function AuthProvider({ children }) {
 
   const signInWithOtp = async (email) => {
     try {
-      const { error } = await authApi.signInWithOtp(email);
-      if (error) throw error;
+      const result = await authApi.signInWithOtp(email);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
       toast.success('Code de vérification envoyé !');
       return { success: true };
     } catch (error) {
@@ -77,13 +79,21 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const verifyOtp = async (email, token) => {
+  const verifyOtp = async (email, token, fullName = '') => {
     try {
-      const { data, error } = await authApi.verifyOtp(email, token);
-      if (error) throw error;
+      const result = await authApi.verifyOtp(email, token, fullName);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
       
-      setUser(data.user);
-      await fetchProfile();
+      // Store JWT token
+      if (result.data?.token) {
+        localStorage.setItem('visiocar_token', result.data.token);
+      }
+      
+      setUser(result.data.user);
+      setProfile(result.data.user);
+      setIsAuthenticated(true);
       toast.success('Connexion réussie !');
       return { success: true };
     } catch (error) {
@@ -93,9 +103,28 @@ export function AuthProvider({ children }) {
     }
   };
 
+  // Handle magic link from URL (for link-based auth)
+  const handleMagicLink = async (access_token) => {
+    try {
+      const { data, error } = await supabase.auth.setSession({ access_token });
+      if (error) throw error;
+      
+      if (data?.user) {
+        setUser(data.user);
+        await fetchProfile();
+        toast.success('Connexion réussie !');
+        return { success: true };
+      }
+    } catch (error) {
+      console.error('Magic link error:', error);
+      toast.error('Lien de connexion invalide ou expiré');
+      return { success: false, error };
+    }
+  };
+
   const signOut = async () => {
     try {
-      await authApi.signOut();
+      localStorage.removeItem('visiocar_token');
       setUser(null);
       setProfile(null);
       setIsAuthenticated(false);
@@ -131,6 +160,7 @@ export function AuthProvider({ children }) {
     isAuthenticated,
     signInWithOtp,
     verifyOtp,
+    handleMagicLink,
     signOut,
     updateProfile,
     refreshProfile,
