@@ -4,11 +4,22 @@ import { toast } from 'sonner';
 
 const AuthContext = createContext();
 
+// Debug helper
+const debugAuth = (label, data) => {
+  console.log(`[Auth Debug] ${label}:`, data);
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Log config on init
+  useEffect(() => {
+    debugAuth('Supabase URL', import.meta.env.VITE_SUPABASE_URL);
+    debugAuth('Anon Key (last 6)', import.meta.env.VITE_SUPABASE_ANON_KEY?.slice(-6));
+  }, []);
 
   // Get app URL from env
   const getAppUrl = () => {
@@ -18,9 +29,8 @@ export function AuthProvider({ children }) {
   // Create or update user profile
   const ensureProfile = async (userId, email, fullName = '') => {
     try {
-      console.log('[Auth] Ensuring profile for:', userId);
+      debugAuth('Ensuring profile for', userId);
       
-      // Check if profile exists
       const { data: existingProfile, error: fetchError } = await supabase
         .from('profiles')
         .select('*')
@@ -28,39 +38,36 @@ export function AuthProvider({ children }) {
         .single();
 
       if (fetchError && fetchError.code !== 'PGRST116') {
-        console.error('[Auth] Profile fetch error:', fetchError);
+        debugAuth('Profile fetch error', fetchError);
       }
 
       if (existingProfile) {
-        console.log('[Auth] Profile exists:', existingProfile);
+        debugAuth('Profile exists', existingProfile);
         setProfile(existingProfile);
         return existingProfile;
       }
 
-      // Create new profile
       const { data: newProfile, error: insertError } = await supabase
         .from('profiles')
-        .insert([
-          {
-            id: userId,
-            email: email,
-            full_name: fullName || email.split('@')[0],
-            created_at: new Date().toISOString(),
-          }
-        ])
+        .insert([{
+          id: userId,
+          email: email,
+          full_name: fullName || email.split('@')[0],
+          created_at: new Date().toISOString(),
+        }])
         .select()
         .single();
 
       if (insertError) {
-        console.error('[Auth] Profile creation error:', insertError);
+        debugAuth('Profile creation error', insertError);
         throw insertError;
       }
 
-      console.log('[Auth] Profile created:', newProfile);
+      debugAuth('Profile created', newProfile);
       setProfile(newProfile);
       return newProfile;
     } catch (error) {
-      console.error('[Auth] Ensure profile error:', error);
+      debugAuth('Ensure profile error', error);
       return null;
     }
   };
@@ -70,7 +77,7 @@ export function AuthProvider({ children }) {
     let mounted = true;
 
     const initializeAuth = async () => {
-      console.log('[Auth] Initializing...');
+      debugAuth('Initializing...', null);
       
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
@@ -78,19 +85,19 @@ export function AuthProvider({ children }) {
         if (!mounted) return;
 
         if (error) {
-          console.error('[Auth] Session error:', error);
+          debugAuth('Session error', error);
         }
 
         if (session?.user) {
-          console.log('[Auth] Session found:', session.user.email);
+          debugAuth('Session found', session.user.email);
           setUser(session.user);
           setIsAuthenticated(true);
           await ensureProfile(session.user.id, session.user.email, session.user.user_metadata?.full_name);
         } else {
-          console.log('[Auth] No session');
+          debugAuth('No session', null);
         }
       } catch (error) {
-        console.error('[Auth] Init error:', error);
+        debugAuth('Init error', error);
       } finally {
         if (mounted) {
           setIsLoading(false);
@@ -100,9 +107,8 @@ export function AuthProvider({ children }) {
 
     initializeAuth();
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('[Auth] Event:', event);
+      debugAuth('Event', event);
       
       if (!mounted) return;
 
@@ -128,22 +134,40 @@ export function AuthProvider({ children }) {
   // Sign up with email/password
   const signUpWithEmail = async (email, password, fullName) => {
     try {
-      console.log('[Auth] Signing up:', email);
+      debugAuth('Signing up', email);
       
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          data: {
-            full_name: fullName,
-          },
+          data: { full_name: fullName },
         },
       });
 
-      if (error) throw error;
+      debugAuth('SignUp response', { data, error });
+
+      if (error) {
+        // Handle specific errors
+        if (error.message?.includes('rate limit')) {
+          throw new Error('Trop de tentatives. Veuillez patienter quelques minutes.');
+        }
+        if (error.message?.includes('already registered')) {
+          throw new Error('Cet email est déjà utilisé. Essayez de vous connecter.');
+        }
+        throw error;
+      }
 
       if (data.user) {
-        // Create profile immediately
+        // Check if email confirmation is required
+        if (data.user.identities?.length === 0) {
+          toast.success('Un email de confirmation vous a été envoyé. Vérifiez votre boîte de réception.');
+          return { 
+            success: true, 
+            message: 'Email de confirmation envoyé',
+            needsConfirmation: true 
+          };
+        }
+        
         await ensureProfile(data.user.id, email, fullName);
         toast.success('Compte créé avec succès !');
         return { success: true };
@@ -151,7 +175,7 @@ export function AuthProvider({ children }) {
 
       return { success: false, error: 'Erreur lors de la création du compte' };
     } catch (error) {
-      console.error('[Auth] Sign up error:', error);
+      debugAuth('Sign up error', error);
       toast.error(error.message || 'Erreur lors de l\'inscription');
       return { success: false, error: error.message };
     }
@@ -160,23 +184,41 @@ export function AuthProvider({ children }) {
   // Sign in with email/password
   const signInWithEmail = async (email, password) => {
     try {
-      console.log('[Auth] Signing in:', email);
+      debugAuth('Signing in', email);
       
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      debugAuth('SignIn response', { 
+        user: data?.user?.email, 
+        error: error?.message,
+        errorCode: error?.code 
+      });
+
+      if (error) {
+        // Provide specific error messages
+        if (error.message === 'Invalid login credentials') {
+          throw new Error('Email ou mot de passe incorrect. Vérifiez vos informations ou créez un compte.');
+        }
+        if (error.message?.includes('Email not confirmed')) {
+          throw new Error('Votre email n\'a pas été confirmé. Vérifiez votre boîte de réception.');
+        }
+        if (error.message?.includes('rate limit')) {
+          throw new Error('Trop de tentatives. Veuillez patienter quelques minutes.');
+        }
+        throw error;
+      }
 
       if (data.user) {
         toast.success('Connexion réussie !');
         return { success: true };
       }
 
-      return { success: false, error: 'Email ou mot de passe incorrect' };
+      return { success: false, error: 'Erreur de connexion' };
     } catch (error) {
-      console.error('[Auth] Sign in error:', error);
+      debugAuth('Sign in error', error);
       toast.error(error.message || 'Erreur de connexion');
       return { success: false, error: error.message };
     }
@@ -185,59 +227,27 @@ export function AuthProvider({ children }) {
   // Sign in with Google
   const signInWithGoogle = async () => {
     try {
-      console.log('[Auth] Starting Google OAuth...');
+      debugAuth('Starting Google OAuth', null);
       
       const redirectUrl = `${getAppUrl()}/auth/callback`;
-      console.log('[Auth] Google redirect URL:', redirectUrl);
+      debugAuth('Redirect URL', redirectUrl);
       
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-        },
+        options: { redirectTo: redirectUrl },
       });
 
       if (error) throw error;
 
       if (data.url) {
-        // Redirect to Google
         window.location.href = data.url;
         return { success: true };
       }
 
       return { success: false, error: 'Erreur OAuth' };
     } catch (error) {
-      console.error('[Auth] Google sign in error:', error);
+      debugAuth('Google sign in error', error);
       toast.error(error.message || 'Erreur de connexion avec Google');
-      return { success: false, error: error.message };
-    }
-  };
-
-  // Sign in with Apple (optional)
-  const signInWithApple = async () => {
-    try {
-      console.log('[Auth] Starting Apple OAuth...');
-      
-      const redirectUrl = `${getAppUrl()}/auth/callback`;
-      
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'apple',
-        options: {
-          redirectTo: redirectUrl,
-        },
-      });
-
-      if (error) throw error;
-
-      if (data.url) {
-        window.location.href = data.url;
-        return { success: true };
-      }
-
-      return { success: false, error: 'Erreur OAuth' };
-    } catch (error) {
-      console.error('[Auth] Apple sign in error:', error);
-      toast.error(error.message || 'Erreur de connexion avec Apple');
       return { success: false, error: error.message };
     }
   };
@@ -251,7 +261,7 @@ export function AuthProvider({ children }) {
       setIsAuthenticated(false);
       toast.success('Déconnexion réussie');
     } catch (error) {
-      console.error('[Auth] Sign out error:', error);
+      debugAuth('Sign out error', error);
     }
   };
 
@@ -263,7 +273,6 @@ export function AuthProvider({ children }) {
     signUpWithEmail,
     signInWithEmail,
     signInWithGoogle,
-    signInWithApple,
     signOut,
   };
 
