@@ -115,10 +115,19 @@ export function AuthProvider({ children }) {
   const signInWithOtp = async (email) => {
     try {
       console.log('[Auth] Sending OTP to:', email);
+      
+      // Determine correct redirect URL based on environment
+      const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      const redirectUrl = isDev 
+        ? 'http://localhost:5173/auth/callback'  // Vite default port
+        : `${window.location.origin}/auth/callback`;
+      
+      console.log('[Auth] Redirect URL:', redirectUrl);
+      
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          emailRedirectTo: redirectUrl,
         },
       });
 

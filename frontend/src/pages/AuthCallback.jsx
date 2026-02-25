@@ -12,6 +12,7 @@ export default function AuthCallback() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       console.log('[AuthCallback] Starting callback handling...');
+      console.log('[AuthCallback] Current URL:', window.location.href);
       
       try {
         // Check for error in URL
@@ -25,8 +26,39 @@ export default function AuthCallback() {
           return;
         }
 
+        // Check for access_token in URL hash (magic link format: #access_token=...)
+        const hash = window.location.hash;
+        console.log('[AuthCallback] URL hash:', hash);
+        
+        if (hash && hash.includes('access_token=')) {
+          const hashParams = new URLSearchParams(hash.substring(1));
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
+          
+          console.log('[AuthCallback] Found access_token in hash');
+          
+          if (accessToken) {
+            const { data, error: setSessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken || '',
+            });
+            
+            if (setSessionError) {
+              console.error('[AuthCallback] setSession error:', setSessionError);
+              throw setSessionError;
+            }
+            
+            if (data?.session?.user) {
+              console.log('[AuthCallback] Session set successfully for:', data.session.user.email);
+              setStatus('success');
+              setTimeout(() => navigate('/dashboard'), 1500);
+              return;
+            }
+          }
+        }
+
         // Get the session (Supabase automatically handles the token in the URL)
-        console.log('[AuthCallback] Getting session...');
+        console.log('[AuthCallback] Getting session from Supabase...');
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
@@ -41,7 +73,7 @@ export default function AuthCallback() {
           // Short delay to show success message
           setTimeout(() => {
             navigate('/dashboard');
-          }, 1000);
+          }, 1500);
         } else {
           // Try to exchange the code for a session
           console.log('[AuthCallback] No session, checking for code...');
@@ -61,14 +93,14 @@ export default function AuthCallback() {
             if (newSession?.user) {
               console.log('[AuthCallback] Session obtained after exchange');
               setStatus('success');
-              setTimeout(() => navigate('/dashboard'), 1000);
+              setTimeout(() => navigate('/dashboard'), 1500);
               return;
             }
           }
           
           console.log('[AuthCallback] No session available');
           setStatus('error');
-          setErrorMessage('Session non trouvée. Veuillez réessayer.');
+          setErrorMessage('Session non trouvée. Vérifiez que vous utilisez le bon lien et qu\'il n\'a pas expiré.');
         }
       } catch (err) {
         console.error('[AuthCallback] Exception:', err);
