@@ -1,36 +1,20 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { AuthProvider, useAuth } from './contexts/AuthContext.jsx';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext.jsx';
 
 // Pages
-import Dashboard from './pages/Dashboard.jsx';
-import Claims from './pages/Claims.jsx';
-import ClaimDetail from './pages/ClaimDetail.jsx';
-import ClaimWizard from './pages/ClaimWizard.jsx';
-import Team from './pages/Team.jsx';
-import Billing from './pages/Billing.jsx';
-import GarageSettings from './pages/GarageSettings.jsx';
-import Login from './pages/Login.jsx';
-import Register from './pages/Register.jsx';
-import AuthCallback from './pages/AuthCallback.jsx';
-import Pricing from './pages/Pricing.jsx';
-import Landing from './pages/Landing.jsx';
-import Layout from './components/Layout.jsx';
+import Dashboard from '@/pages/Dashboard.jsx';
+import Claims from '@/pages/Claims.jsx';
+import ClaimDetail from '@/pages/ClaimDetail.jsx';
+import ClaimWizard from '@/pages/ClaimWizard.jsx';
+import Login from '@/pages/Login.jsx';
+import Register from '@/pages/Register.jsx';
+import AuthCallback from '@/pages/AuthCallback.jsx';
+import Landing from '@/pages/Landing.jsx';
+import Pricing from '@/pages/Pricing.jsx';
 
-// Query Client
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 5 * 60 * 1000, // 5 minutes
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
-
-// Protected Route component
+// Protected Route
 function ProtectedRoute({ children }) {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -52,7 +36,7 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-// Public Route component (redirects to dashboard if authenticated)
+// Public Route
 function PublicRoute({ children }) {
   const { isAuthenticated, isLoading } = useAuth();
 
@@ -74,7 +58,6 @@ function PublicRoute({ children }) {
   return children;
 }
 
-// App Routes
 function AppRoutes() {
   return (
     <Routes>
@@ -96,87 +79,51 @@ function AppRoutes() {
       {/* Protected Routes */}
       <Route path="/dashboard" element={
         <ProtectedRoute>
-          <Layout>
-            <Dashboard />
-          </Layout>
+          <Dashboard />
         </ProtectedRoute>
       } />
       <Route path="/claims" element={
         <ProtectedRoute>
-          <Layout>
-            <Claims />
-          </Layout>
+          <Claims />
         </ProtectedRoute>
       } />
       <Route path="/claims/:id" element={
         <ProtectedRoute>
-          <Layout>
-            <ClaimDetail />
-          </Layout>
+          <ClaimDetail />
         </ProtectedRoute>
       } />
       <Route path="/wizard" element={
         <ProtectedRoute>
-          <Layout>
-            <ClaimWizard />
-          </Layout>
+          <ClaimWizard />
         </ProtectedRoute>
       } />
       <Route path="/wizard/:id" element={
         <ProtectedRoute>
-          <Layout>
-            <ClaimWizard />
-          </Layout>
-        </ProtectedRoute>
-      } />
-      <Route path="/team" element={
-        <ProtectedRoute>
-          <Layout>
-            <Team />
-          </Layout>
-        </ProtectedRoute>
-      } />
-      <Route path="/billing" element={
-        <ProtectedRoute>
-          <Layout>
-            <Billing />
-          </Layout>
-        </ProtectedRoute>
-      } />
-      <Route path="/settings" element={
-        <ProtectedRoute>
-          <Layout>
-            <GarageSettings />
-          </Layout>
+          <ClaimWizard />
         </ProtectedRoute>
       } />
 
-      {/* Redirect unknown routes */}
+      {/* Redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
 
-// Main App
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Router>
-          <AppRoutes />
-          <Toaster 
-            position="top-right"
-            toastOptions={{
-              style: {
-                background: '#151921',
-                color: '#fff',
-                border: '1px solid rgba(255,255,255,0.1)',
-              },
-            }}
-          />
-        </Router>
-      </AuthProvider>
-    </QueryClientProvider>
+    <AuthProvider>
+      <AppRoutes />
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: '#151921',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.1)',
+          },
+        }}
+      />
+    </AuthProvider>
   );
 }
 

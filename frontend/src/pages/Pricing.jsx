@@ -1,121 +1,101 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle, Zap, Building2, ArrowLeft } from 'lucide-react';
+import { Check, ArrowRight } from 'lucide-react';
+import GlassButton from '@/components/ui-custom/GlassButton';
 
 const plans = [
   {
-    id: 'starter',
     name: 'Starter',
-    price: 69,
-    description: 'Parfait pour les petits garages',
-    icon: Zap,
+    price: '69',
+    description: 'Parfait pour débuter',
     features: [
       '15 dossiers par mois',
-      'Export PDF',
-      'Stockage illimité',
+      'Rapports PDF',
+      'Stockage photos 5GB',
       'Support email',
     ],
+    cta: 'Commencer',
+    highlighted: false,
   },
   {
-    id: 'business',
     name: 'Business',
-    price: 199,
-    description: 'Pour les garages professionnels',
-    icon: Building2,
-    popular: true,
+    price: '199',
+    description: 'Pour les experts actifs',
     features: [
       'Dossiers illimités',
-      'Export PDF',
-      'Stockage illimité',
+      'Rapports PDF avancés',
+      'Stockage photos illimité',
       'Support prioritaire',
-      'API access',
+      'API d\'intégration',
     ],
+    cta: 'Choisir Business',
+    highlighted: true,
   },
 ];
 
 export default function Pricing() {
   return (
     <div className="min-h-screen bg-[#0B0E14]">
-      {/* Header */}
-      <header className="border-b border-white/10">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-4">
-          <Link to="/" className="text-white/60 hover:text-white transition-colors">
-            <ArrowLeft className="w-6 h-6" />
-          </Link>
-          <h1 className="text-2xl font-bold text-[#007AFF]">VisioCar</h1>
-        </div>
-      </header>
-
-      {/* Content */}
-      <div className="max-w-6xl mx-auto px-4 py-16">
-        <div className="text-center mb-12">
-          <h2 className="text-4xl font-bold text-white mb-4">Tarifs simples et transparents</h2>
-          <p className="text-xl text-white/50">Choisissez le plan adapté à vos besoins</p>
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          {plans.map((plan) => {
-            const Icon = plan.icon;
-            return (
-              <div
-                key={plan.id}
-                className={`
-                  relative p-8 rounded-2xl border transition-colors
-                  ${plan.popular 
-                    ? 'bg-[#007AFF]/5 border-[#007AFF]/30' 
-                    : 'bg-white/[0.03] border-white/[0.06]'}
-                `}
-              >
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-[#007AFF] text-white text-sm font-medium rounded-full">
-                    Recommandé
-                  </div>
-                )}
-
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="p-3 rounded-xl bg-[#007AFF]/10">
-                    <Icon className="w-8 h-8 text-[#007AFF]" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-bold text-white">{plan.name}</h3>
-                    <p className="text-white/50 text-sm">{plan.description}</p>
-                  </div>
-                </div>
-
-                <div className="mb-6">
-                  <span className="text-4xl font-bold text-white">{plan.price}€</span>
-                  <span className="text-white/50">/mois</span>
-                </div>
-
-                <ul className="space-y-4 mb-8">
-                  {plan.features.map((feature) => (
-                    <li key={feature} className="flex items-center gap-3 text-white/70">
-                      <CheckCircle className="w-5 h-5 text-[#34C759]" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
-
-                <Link
-                  to="/login"
-                  className={`
-                    block w-full py-3 text-center rounded-xl font-medium transition-colors
-                    ${plan.popular
-                      ? 'bg-[#007AFF] text-white hover:bg-[#007AFF]/90'
-                      : 'bg-white/5 text-white border border-white/10 hover:bg-white/10'}
-                  `}
-                >
-                  Commencer l'essai gratuit
-                </Link>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-12 text-center">
-          <p className="text-white/40">
-            Essai gratuit de 5 jours. Aucune carte de crédit requise.
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+        {/* Header */}
+        <div className="text-center mb-16">
+          <h1 className="text-4xl font-bold text-white mb-4">
+            Tarifs simples et transparents
+          </h1>
+          <p className="text-xl text-white/60 max-w-2xl mx-auto">
+            Choisissez le plan qui correspond à vos besoins. 
+            Essai gratuit de 14 jours sans engagement.
           </p>
+        </div>
+
+        {/* Plans */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          {plans.map((plan) => (
+            <div
+              key={plan.name}
+              className={`rounded-2xl p-8 ${
+                plan.highlighted
+                  ? 'bg-gradient-to-b from-[#007AFF]/20 to-transparent border-2 border-[#007AFF]/50'
+                  : 'bg-[#151921] border border-white/[0.06]'
+              }`}
+            >
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold text-white mb-2">{plan.name}</h3>
+                <p className="text-white/50">{plan.description}</p>
+              </div>
+
+              <div className="mb-6">
+                <span className="text-5xl font-bold text-white">{plan.price}€</span>
+                <span className="text-white/50">/mois</span>
+              </div>
+
+              <ul className="space-y-3 mb-8">
+                {plan.features.map((feature) => (
+                  <li key={feature} className="flex items-center gap-3">
+                    <Check className="w-5 h-5 text-[#34C759]" />
+                    <span className="text-white/80">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <Link to="/register">
+                <GlassButton 
+                  variant={plan.highlighted ? 'primary' : 'secondary'}
+                  className="w-full justify-center"
+                >
+                  {plan.cta}
+                  <ArrowRight className="w-4 h-4" />
+                </GlassButton>
+              </Link>
+            </div>
+          ))}
+        </div>
+
+        {/* Back */}
+        <div className="text-center mt-12">
+          <Link to="/" className="text-white/50 hover:text-white">
+            ← Retour à l'accueil
+          </Link>
         </div>
       </div>
     </div>

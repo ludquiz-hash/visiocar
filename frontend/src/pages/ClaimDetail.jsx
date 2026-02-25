@@ -1,223 +1,220 @@
-import React from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { claimsApi } from '../api/index.js';
-import { ArrowLeft, Download, Trash2, Loader2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
+import { ArrowLeft, Edit, FileText, Trash2, Download } from 'lucide-react';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
+import GlassCard from '@/components/ui-custom/GlassCard';
+import GlassButton from '@/components/ui-custom/GlassButton';
+import StatusBadge from '@/components/ui-custom/StatusBadge';
+import Sidebar from '@/components/layout/Sidebar';
+import { supabase } from '@/lib/supabase.js';
 import { toast } from 'sonner';
 
 export default function ClaimDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const [claim, setClaim] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const { data: claimData, isLoading } = useQuery({
-    queryKey: ['claim', id],
-    queryFn: () => claimsApi.getClaim(id),
-  });
+  useEffect(() => {
+    fetchClaim();
+  }, [id]);
 
-  const generatePDFMutation = useMutation({
-    mutationFn: () => claimsApi.generatePDF(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['claim', id] });
-      toast.success('PDF généré avec succès !');
-    },
-    onError: (error) => {
-      toast.error(error.message || 'Erreur lors de la génération du PDF');
-    },
-  });
+  const fetchClaim = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('claims')
+        .select('*')
+        .eq('id', id)
+        .single();
 
-  const deleteMutation = useMutation({
-    mutationFn: () => claimsApi.deleteClaim(id),
-    onSuccess: () => {
+      if (error) throw error;
+      setClaim(data);
+    } catch (error) {
+      console.error('Error fetching claim:', error);
+      toast.error('Dossier non trouvé');
+      navigate('/claims');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Êtes-vous sûr de vouloir supprimer ce dossier ?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('claims')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
       toast.success('Dossier supprimé');
       navigate('/claims');
-    },
-    onError: (error) => {
-      toast.error(error.message || 'Erreur lors de la suppression');
-    },
-  });
+    } catch (error) {
+      toast.error('Erreur lors de la suppression');
+    }
+  };
 
-  const claim = claimData?.data;
-
-  if (isLoading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 text-[#007AFF] animate-spin" />
+      <div className="min-h-screen bg-[#0B0E14] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
       </div>
     );
   }
 
-  if (!claim) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-white/50">Dossier introuvable</p>
-        <Link to="/claims" className="text-[#007AFF] hover:underline mt-2 inline-block">
-          Retour aux dossiers
-        </Link>
-      </div>
-    );
-  }
+  if (!claim) return null;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Link to="/claims" className="p-2 rounded-lg hover:bg-white/10 text-white/60">
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-white">
-            {claim.vehicle_data?.brand} {claim.vehicle_data?.model}
-          </h1>
-          <p className="text-white/50">#{claim.reference}</p>
-        </div>
-        <div className="flex gap-2">
-          {claim.pdf_url ? (
-            <a
-              href={claim.pdf_url}
-              download
-              className="flex items-center gap-2 px-4 py-2 bg-[#007AFF] text-white rounded-lg font-medium hover:bg-[#007AFF]/90"
-            >
-              <Download className="w-4 h-4" />
-              Télécharger PDF
-            </a>
-          ) : (
-            <button
-              onClick={() => generatePDFMutation.mutate()}
-              disabled={generatePDFMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 bg-[#007AFF] text-white rounded-lg font-medium hover:bg-[#007AFF]/90 disabled:opacity-50"
-            >
-              {generatePDFMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
-              Générer PDF
-            </button>
-          )}
-          {claim.status === 'draft' && (
-            <button
-              onClick={() => deleteMutation.mutate()}
-              disabled={deleteMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-red-500 rounded-lg font-medium hover:bg-red-500/20"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Vehicle Info */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="bg-white/[0.03] rounded-xl p-6 border border-white/[0.06]">
-            <h2 className="text-lg font-semibold text-white mb-4">Véhicule</h2>
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: 'Marque', value: claim.vehicle_data?.brand },
-                { label: 'Modèle', value: claim.vehicle_data?.model },
-                { label: 'Année', value: claim.vehicle_data?.year },
-                { label: 'Plaque', value: claim.vehicle_data?.plate },
-                { label: 'VIN', value: claim.vehicle_data?.vin },
-                { label: 'Couleur', value: claim.vehicle_data?.color },
-              ].map((item) => (
-                <div key={item.label}>
-                  <p className="text-xs text-white/40 mb-1">{item.label}</p>
-                  <p className="text-sm font-medium text-white">{item.value || '-'}</p>
-                </div>
-              ))}
+    <div className="min-h-screen bg-[#0B0E14]">
+      <Sidebar />
+      
+      <main className="lg:ml-64 min-h-screen p-4 md:p-6 lg:p-8 pb-24 lg:pb-8">
+        <div className="max-w-4xl mx-auto">
+          {/* Header */}
+          <div className="flex items-center gap-4 mb-8">
+            <Link to="/claims">
+              <GlassButton variant="ghost" size="sm">
+                <ArrowLeft className="w-4 h-4" />
+              </GlassButton>
+            </Link>
+            <div className="flex-1">
+              <h1 className="text-2xl font-bold text-white">
+                {claim.vehicle_brand} {claim.vehicle_model}
+              </h1>
+              <p className="text-white/50 text-sm">
+                Dossier #{claim.reference || claim.id.slice(0, 8)}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Link to={`/wizard?edit=${claim.id}`}>
+                <GlassButton variant="secondary" size="sm" icon={Edit}>
+                  Modifier
+                </GlassButton>
+              </Link>
+              <GlassButton variant="ghost" size="sm" icon={Trash2} onClick={handleDelete}>
+                Supprimer
+              </GlassButton>
             </div>
           </div>
 
-          {/* Damages */}
-          {claim.ai_report?.damages?.length > 0 && (
-            <div className="bg-white/[0.03] rounded-xl p-6 border border-white/[0.06]">
-              <h2 className="text-lg font-semibold text-white mb-4">
-                Dommages ({claim.ai_report.damages.length})
-              </h2>
-              <div className="space-y-3">
-                {claim.ai_report.damages.map((damage, idx) => (
-                  <div key={idx} className="p-4 bg-white/[0.02] rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium text-white">{damage.zone}</span>
-                      <span className={`
-                        px-2 py-1 rounded text-xs font-medium
-                        ${damage.severity === 'importante' ? 'bg-red-500/10 text-red-500' :
-                          damage.severity === 'legere' ? 'bg-green-500/10 text-green-500' :
-                          'bg-yellow-500/10 text-yellow-500'}
-                      `}>
-                        {damage.severity}
-                      </span>
+          {/* Status */}
+          <div className="mb-6">
+            <StatusBadge status={claim.status} />
+          </div>
+
+          {/* Content */}
+          <div className="space-y-6">
+            {/* Client Info */}
+            <GlassCard className="p-6">
+              <h2 className="text-lg font-semibold text-white mb-4">Informations client</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-white/50">Nom:</span>
+                  <p className="text-white">{claim.client_name || 'Non renseigné'}</p>
+                </div>
+                <div>
+                  <span className="text-white/50">Email:</span>
+                  <p className="text-white">{claim.client_email || 'Non renseigné'}</p>
+                </div>
+                <div>
+                  <span className="text-white/50">Téléphone:</span>
+                  <p className="text-white">{claim.client_phone || 'Non renseigné'}</p>
+                </div>
+                <div>
+                  <span className="text-white/50">Adresse:</span>
+                  <p className="text-white">{claim.client_address || 'Non renseigné'}</p>
+                </div>
+              </div>
+            </GlassCard>
+
+            {/* Vehicle Info */}
+            <GlassCard className="p-6">
+              <h2 className="text-lg font-semibold text-white mb-4">Véhicule</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-white/50">Marque:</span>
+                  <p className="text-white">{claim.vehicle_brand || 'Non renseigné'}</p>
+                </div>
+                <div>
+                  <span className="text-white/50">Modèle:</span>
+                  <p className="text-white">{claim.vehicle_model || 'Non renseigné'}</p>
+                </div>
+                <div>
+                  <span className="text-white/50">Année:</span>
+                  <p className="text-white">{claim.vehicle_year || 'Non renseigné'}</p>
+                </div>
+                <div>
+                  <span className="text-white/50">Immatriculation:</span>
+                  <p className="text-white">{claim.vehicle_license_plate || 'Non renseigné'}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <span className="text-white/50">VIN:</span>
+                  <p className="text-white">{claim.vehicle_vin || 'Non renseigné'}</p>
+                </div>
+              </div>
+            </GlassCard>
+
+            {/* Photos */}
+            {claim.photos && claim.photos.length > 0 && (
+              <GlassCard className="p-6">
+                <h2 className="text-lg font-semibold text-white mb-4">Photos ({claim.photos.length})</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {claim.photos.map((photo, index) => (
+                    <img
+                      key={index}
+                      src={photo.url}
+                      alt={`Photo ${index + 1}`}
+                      className="w-full aspect-square object-cover rounded-xl"
+                    />
+                  ))}
+                </div>
+              </GlassCard>
+            )}
+
+            {/* Analysis */}
+            <GlassCard className="p-6">
+              <h2 className="text-lg font-semibold text-white mb-4">Analyse</h2>
+              <div className="space-y-4 text-sm">
+                <div>
+                  <span className="text-white/50">Zones endommagées:</span>
+                  <p className="text-white">{(claim.damage_areas || []).join(', ') || 'Non renseigné'}</p>
+                </div>
+                <div>
+                  <span className="text-white/50">Description:</span>
+                  <p className="text-white">{claim.damage_description || 'Non renseigné'}</p>
+                </div>
+                <div>
+                  <span className="text-white/50">Coût estimé:</span>
+                  <p className="text-white">{claim.estimated_repair_cost ? `${claim.estimated_repair_cost} €` : 'Non estimé'}</p>
+                </div>
+              </div>
+            </GlassCard>
+
+            {/* Expert Notes */}
+            {(claim.expert_notes || claim.repair_recommendations) && (
+              <GlassCard className="p-6">
+                <h2 className="text-lg font-semibold text-white mb-4">Notes de l'expert</h2>
+                <div className="space-y-4 text-sm">
+                  {claim.expert_notes && (
+                    <div>
+                      <span className="text-white/50">Observations:</span>
+                      <p className="text-white">{claim.expert_notes}</p>
                     </div>
-                    <p className="text-sm text-white/60">{damage.description}</p>
-                    <p className="text-sm text-[#007AFF] mt-1">{damage.estimated_hours}h estimées</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Photos */}
-          {claim.images?.length > 0 && (
-            <div className="bg-white/[0.03] rounded-xl p-6 border border-white/[0.06]">
-              <h2 className="text-lg font-semibold text-white mb-4">Photos</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {claim.images.map((image, idx) => (
-                  <a
-                    key={idx}
-                    href={image.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="aspect-video rounded-lg overflow-hidden bg-white/[0.04] hover:opacity-80 transition-opacity"
-                  >
-                    <img src={image.url} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Sidebar */}
-        <div className="space-y-6">
-          {/* Client */}
-          <div className="bg-white/[0.03] rounded-xl p-6 border border-white/[0.06]">
-            <h2 className="text-lg font-semibold text-white mb-4">Client</h2>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-white/40 mb-1">Nom</p>
-                <p className="text-sm font-medium text-white">{claim.client_data?.name || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-white/40 mb-1">Email</p>
-                <p className="text-sm text-white/70">{claim.client_data?.email || '-'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-white/40 mb-1">Téléphone</p>
-                <p className="text-sm text-white/70">{claim.client_data?.phone || '-'}</p>
-              </div>
-            </div>
+                  )}
+                  {claim.repair_recommendations && (
+                    <div>
+                      <span className="text-white/50">Recommandations:</span>
+                      <p className="text-white">{claim.repair_recommendations}</p>
+                    </div>
+                  )}
+                </div>
+              </GlassCard>
+            )}
           </div>
-
-          {/* Insurance */}
-          {claim.insurance_details?.company && (
-            <div className="bg-white/[0.03] rounded-xl p-6 border border-white/[0.06]">
-              <h2 className="text-lg font-semibold text-white mb-4">Assurance</h2>
-              <div className="space-y-3">
-                <div>
-                  <p className="text-xs text-white/40 mb-1">Compagnie</p>
-                  <p className="text-sm font-medium text-white">{claim.insurance_details.company}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-white/40 mb-1">N° sinistre</p>
-                  <p className="text-sm text-white/70">{claim.insurance_details.claim_number || '-'}</p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
-      </div>
+      </main>
     </div>
   );
 }
