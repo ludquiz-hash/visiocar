@@ -1,19 +1,20 @@
-import { getCurrentSession } from './supabase.js';
+import { supabase } from '../lib/supabase.js';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
 /**
- * Get stored JWT token
+ * Get current Supabase session
  */
-function getToken() {
-  return localStorage.getItem('visiocar_token');
+async function getSession() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session;
 }
 
 /**
  * Generic API request helper
  */
 async function apiRequest(endpoint, options = {}) {
-  const token = getToken();
+  const session = await getSession();
   
   const headers = {
     'Content-Type': 'application/json',
@@ -21,8 +22,8 @@ async function apiRequest(endpoint, options = {}) {
   };
 
   // Add auth token if available
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`;
   }
 
   const response = await fetch(`${API_URL}${endpoint}`, {
@@ -58,41 +59,27 @@ export const authApi = {
   },
 
   async signInWithOtp(email) {
-    try {
-      const response = await fetch(`${API_URL}/auth/otp/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        return { success: false, error: data.error || 'Failed to send code' };
-      }
-      return { success: true, data };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true };
   },
 
-  async verifyOtp(email, token, fullName = '') {
-    try {
-      const response = await fetch(`${API_URL}/auth/otp/verify`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, code: token, fullName }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        return { success: false, error: data.error || 'Invalid code' };
-      }
-      return { success: true, data: data.data };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
+  async verifyOtp(email, token) {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token,
+      type: 'email',
+    });
+    if (error) return { success: false, error: error.message };
+    return { success: true, data };
   },
 
   async signOut() {
-    const { supabase } = await import('./supabase.js');
     return supabase.auth.signOut();
   },
 };
@@ -208,8 +195,6 @@ export const stripeApi = {
  */
 export const storageApi = {
   async uploadFile(bucket, path, file) {
-    const { supabase } = await import('./supabase.js');
-    
     const { data, error } = await supabase.storage
       .from(bucket)
       .upload(path, file, {
@@ -228,8 +213,6 @@ export const storageApi = {
   },
 
   async deleteFile(bucket, path) {
-    const { supabase } = await import('./supabase.js');
-    
     const { error } = await supabase.storage
       .from(bucket)
       .remove([path]);

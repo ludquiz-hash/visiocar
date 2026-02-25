@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { authApi } from '../api/index.js';
 import { toast } from 'sonner';
 
 const AuthContext = createContext();
@@ -10,147 +9,168 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authInitialized, setAuthInitialized] = useState(false);
+
+  // Fetch user profile
+  const fetchProfile = useCallback(async (userId) => {
+    if (!userId) return;
+    
+    try {
+      console.log('[Auth] Fetching profile for user:', userId);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('[Auth] Profile fetch error:', error);
+        // Don't block auth if profile fetch fails
+        setProfile(null);
+      } else {
+        console.log('[Auth] Profile fetched:', data);
+        setProfile(data);
+      }
+    } catch (error) {
+      console.error('[Auth] Profile fetch exception:', error);
+      setProfile(null);
+    }
+  }, []);
 
   // Initialize auth state
   useEffect(() => {
-    const initAuth = async () => {
+    let mounted = true;
+
+    const initializeAuth = async () => {
+      console.log('[Auth] Initializing...');
+      
       try {
-        // Check for existing session
-        const { data: { session } } = await supabase.auth.getSession();
+        // Get current session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
+        if (sessionError) {
+          console.error('[Auth] Session error:', sessionError);
+        }
+
+        if (!mounted) return;
+
         if (session?.user) {
+          console.log('[Auth] Session found:', session.user.email);
           setUser(session.user);
-          await fetchProfile();
+          setIsAuthenticated(true);
+          await fetchProfile(session.user.id);
+        } else {
+          console.log('[Auth] No session found');
+          setUser(null);
+          setProfile(null);
+          setIsAuthenticated(false);
         }
       } catch (error) {
-        console.error('Auth initialization error:', error);
+        console.error('[Auth] Initialization error:', error);
       } finally {
-        setIsLoading(false);
+        if (mounted) {
+          setIsLoading(false);
+          setAuthInitialized(true);
+          console.log('[Auth] Initialization complete');
+        }
       }
     };
 
-    initAuth();
+    initializeAuth();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        setUser(session.user);
-        await fetchProfile();
+      console.log('[Auth] Event:', event, 'Session:', session ? 'present' : 'null');
+      
+      if (!mounted) return;
+
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        if (session?.user) {
+          setUser(session.user);
+          setIsAuthenticated(true);
+          await fetchProfile(session.user.id);
+        }
       } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setProfile(null);
         setIsAuthenticated(false);
+      } else if (event === 'USER_UPDATED') {
+        if (session?.user) {
+          setUser(session.user);
+        }
+      }
+      
+      if (event === 'INITIAL_SESSION') {
+        setIsLoading(false);
+        setAuthInitialized(true);
       }
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
     };
-  }, []);
-
-  const fetchProfile = async () => {
-    try {
-      const response = await authApi.getMe();
-      if (response.success) {
-        setProfile(response.data);
-        setIsAuthenticated(true);
-      }
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-      if (error.status === 401) {
-        // Token expired or invalid
-        await signOut();
-      }
-    }
-  };
+  }, [fetchProfile]);
 
   const signInWithOtp = async (email) => {
     try {
-      const result = await authApi.signInWithOtp(email);
-      if (!result.success) {
-        throw new Error(result.error);
+      console.log('[Auth] Sending OTP to:', email);
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+
+      if (error) {
+        console.error('[Auth] SignIn error:', error);
+        throw error;
       }
-      toast.success('Code de vérification envoyé !');
+      
+      toast.success('Email envoyé ! Vérifiez votre boîte de réception.');
       return { success: true };
     } catch (error) {
-      console.error('OTP error:', error);
-      toast.error(error.message || 'Erreur lors de l\'envoi du code');
-      return { success: false, error };
+      console.error('[Auth] SignIn exception:', error);
+      toast.error(error.message || 'Erreur lors de l\'envoi de l\'email');
+      return { success: false, error: error.message };
     }
   };
 
-  const verifyOtp = async (email, token, fullName = '') => {
+  const verifyOtp = async (email, token) => {
     try {
-      const result = await authApi.verifyOtp(email, token, fullName);
-      if (!result.success) {
-        throw new Error(result.error);
+      console.log('[Auth] Verifying OTP for:', email);
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'email',
+      });
+
+      if (error) {
+        console.error('[Auth] Verify error:', error);
+        throw error;
       }
-      
-      // Store JWT token
-      if (result.data?.token) {
-        localStorage.setItem('visiocar_token', result.data.token);
-      }
-      
-      setUser(result.data.user);
-      setProfile(result.data.user);
-      setIsAuthenticated(true);
+
+      console.log('[Auth] OTP verified, user:', data?.user?.email);
       toast.success('Connexion réussie !');
-      return { success: true };
+      return { success: true, data };
     } catch (error) {
-      console.error('Verify OTP error:', error);
+      console.error('[Auth] Verify exception:', error);
       toast.error(error.message || 'Code invalide');
-      return { success: false, error };
-    }
-  };
-
-  // Handle magic link from URL (for link-based auth)
-  const handleMagicLink = async (access_token) => {
-    try {
-      const { data, error } = await supabase.auth.setSession({ access_token });
-      if (error) throw error;
-      
-      if (data?.user) {
-        setUser(data.user);
-        await fetchProfile();
-        toast.success('Connexion réussie !');
-        return { success: true };
-      }
-    } catch (error) {
-      console.error('Magic link error:', error);
-      toast.error('Lien de connexion invalide ou expiré');
-      return { success: false, error };
+      return { success: false, error: error.message };
     }
   };
 
   const signOut = async () => {
     try {
-      localStorage.removeItem('visiocar_token');
+      console.log('[Auth] Signing out...');
+      await supabase.auth.signOut();
       setUser(null);
       setProfile(null);
       setIsAuthenticated(false);
       toast.success('Déconnexion réussie');
     } catch (error) {
-      console.error('Sign out error:', error);
+      console.error('[Auth] SignOut error:', error);
     }
-  };
-
-  const updateProfile = async (updates) => {
-    try {
-      const response = await authApi.updateProfile(updates);
-      if (response.success) {
-        setProfile(prev => ({ ...prev, ...updates }));
-        toast.success('Profil mis à jour');
-        return { success: true };
-      }
-    } catch (error) {
-      console.error('Update profile error:', error);
-      toast.error(error.message || 'Erreur lors de la mise à jour');
-      return { success: false, error };
-    }
-  };
-
-  const refreshProfile = async () => {
-    await fetchProfile();
   };
 
   const value = {
@@ -158,12 +178,10 @@ export function AuthProvider({ children }) {
     profile,
     isLoading,
     isAuthenticated,
+    authInitialized,
     signInWithOtp,
     verifyOtp,
-    handleMagicLink,
     signOut,
-    updateProfile,
-    refreshProfile,
   };
 
   return (

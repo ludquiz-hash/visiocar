@@ -13,6 +13,7 @@ import Team from './pages/Team.jsx';
 import Billing from './pages/Billing.jsx';
 import GarageSettings from './pages/GarageSettings.jsx';
 import Login from './pages/Login.jsx';
+import AuthCallback from './pages/AuthCallback.jsx';
 import Pricing from './pages/Pricing.jsx';
 import Landing from './pages/Landing.jsx';
 import Layout from './components/Layout.jsx';
@@ -84,6 +85,7 @@ function AppRoutes() {
           <Login />
         </PublicRoute>
       } />
+      <Route path="/auth/callback" element={<AuthCallback />} />
 
       {/* Protected Routes */}
       <Route path="/dashboard" element={
